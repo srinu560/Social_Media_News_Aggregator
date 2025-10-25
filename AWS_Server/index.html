@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serverless News Aggregator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3b82f6;
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+        }
+
+        .category-btn.active {
+            background-color: #3b82f6;
+            color: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        .lang-btn.active {
+            background-color: #1e40af;
+            color: white;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-100 text-slate-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-slate-900">Latest News</h1>
+            <p class="text-slate-500 mt-2">Aggregated from top sources, powered by AWS Serverless.</p>
+        </header>
+
+        <!-- Main Category Filters -->
+        <nav id="category-filters" class="flex justify-center flex-wrap gap-2 md:gap-3 mb-4">
+            <!-- Buttons are the same as local version -->
+            <button
+                class="category-btn active font-medium py-2 px-4 rounded-full bg-white hover:bg-slate-200 transition-all"
+                data-category="All">All News</button>
+            <button class="category-btn font-medium py-2 px-4 rounded-full bg-white hover:bg-slate-200 transition-all"
+                data-category="Indian News">Indian News</button>
+            <button class="category-btn font-medium py-2 px-4 rounded-full bg-white hover:bg-slate-200 transition-all"
+                data-category="World News">World News</button>
+            <button class="category-btn font-medium py-2 px-4 rounded-full bg-white hover:bg-slate-200 transition-all"
+                data-category="Technology">Technology</button>
+            <button class="category-btn font-medium py-2 px-4 rounded-full bg-white hover:bg-slate-200 transition-all"
+                data-category="Business">Business</button>
+            <button class="category-btn font-medium py-2 px-4 rounded-full bg-white hover:bg-slate-200 transition-all"
+                data-category="Entertainment">Entertainment</button>
+            <button class="category-btn font-medium py-2 px-4 rounded-full bg-white hover:bg-slate-200 transition-all"
+                data-category="Crime">Crime</button>
+        </nav>
+
+        <!-- Language Sub-Category Filters (Initially Hidden) -->
+        <nav id="language-filters"
+            class="hidden flex justify-center flex-wrap gap-2 md:gap-3 mb-8 p-3 bg-slate-200 rounded-lg">
+            <button
+                class="lang-btn active font-medium py-1 px-3 rounded-full bg-white hover:bg-slate-100 transition-all"
+                data-language="All">All Indian</button>
+            <button class="lang-btn font-medium py-1 px-3 rounded-full bg-white hover:bg-slate-100 transition-all"
+                data-language="English">English</button>
+            <button class="lang-btn font-medium py-1 px-3 rounded-full bg-white hover:bg-slate-100 transition-all"
+                data-language="Hindi">Hindi</button>
+            <button class="lang-btn font-medium py-1 px-3 rounded-full bg-white hover:bg-slate-100 transition-all"
+                data-language="Telugu">Telugu</button>
+            <button class="lang-btn font-medium py-1 px-3 rounded-full bg-white hover:bg-slate-100 transition-all"
+                data-language="Malayalam">Malayalam</button>
+            <button class="lang-btn font-medium py-1 px-3 rounded-full bg-white hover:bg-slate-100 transition-all"
+                data-language="Kannada">Kannada</button>
+            <button class="lang-btn font-medium py-1 px-3 rounded-full bg-white hover:bg-slate-100 transition-all"
+                data-language="Tamil">Tamil</button>
+        </nav>
+
+        <main id="news-container"
+            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
+            <div id="loading-state"
+                class="col-span-full flex flex-col items-center justify-center p-12 bg-white rounded-lg shadow-md">
+                <div class="spinner"></div>
+                <p class="mt-4 text-lg font-medium">Fetching the latest headlines from AWS...</p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // IMPORTANT: Replace this with your actual API Gateway URL
+        const API_BASE_URL = 'https://uvu52ry15m.execute-api.ap-south-1.amazonaws.com/prod';
+
+        const newsContainer = document.getElementById('news-container');
+        const loadingState = document.getElementById('loading-state');
+        const categoryFilters = document.getElementById('category-filters');
+        const languageFilters = document.getElementById('language-filters');
+
+        let currentCategory = 'All';
+        let currentLanguage = 'All';
+        let allArticles = [];
+
+        function formatDate(dateString) {
+            if (!dateString || dateString === 'N/A') return 'Just now';
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            } catch (e) {
+                return 'Recent';
+            }
+        }
+
+        async function trackView(articleLink) {
+            try {
+                await fetch(`${API_BASE_URL}/track-view`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ articleLink: articleLink })
+                });
+            } catch (error) {
+                console.error('Failed to track view:', error);
+            }
+        }
+
+        function renderArticles() {
+            // This function's logic is identical to the local version
+            newsContainer.innerHTML = '';
+
+            let articlesToRender = allArticles;
+
+            if (currentCategory === 'Indian News') {
+                articlesToRender = allArticles.filter(a => a.category === 'Indian News');
+                if (currentLanguage !== 'All') {
+                    articlesToRender = articlesToRender.filter(a => a.sub_category === currentLanguage);
+                }
+            } else if (currentCategory !== 'All') {
+                articlesToRender = allArticles.filter(a => a.category === currentCategory);
+            }
+
+            if (!articlesToRender || articlesToRender.length === 0) {
+                displayError(`No articles found. The news fetcher runs hourly.`);
+                return;
+            }
+
+            articlesToRender.forEach(article => {
+                const articleCard = document.createElement('a');
+                articleCard.href = article.link;
+                articleCard.target = '_blank';
+                articleCard.className = 'flex flex-col bg-white rounded-xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden group';
+
+                // Pass the unique article 'link' to the tracking function
+                articleCard.addEventListener('click', () => trackView(article.link));
+
+                const placeholderImg = `https://placehold.co/600x400/e2e8f0/475569?text=${encodeURIComponent(article.sourceName)}`;
+                const displayCategory = article.sub_category && article.sub_category !== 'N/A' ? article.sub_category : article.category;
+
+                articleCard.innerHTML = `
+                    <div class="relative">
+                        <img src="${article.imageUrl === 'N/A' ? placeholderImg : article.imageUrl}" alt="Article image" class="h-48 w-full object-cover" onerror="this.onerror=null;this.src='${placeholderImg}';">
+                        <span class="absolute top-2 right-2 bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-full">${displayCategory}</span>
+                    </div>
+                    <div class="p-5 flex flex-col flex-grow">
+                        <h2 class="text-md font-bold text-slate-900 mb-2 flex-grow group-hover:text-blue-600 transition-colors">${article.title}</h2>
+                        <div class="flex items-center justify-between text-sm text-slate-500 mt-3">
+                            <span class="font-semibold">${article.sourceName}</span>
+                            <span>${formatDate(article.publishedAt)}</span>
+                        </div>
+                    </div>
+                `;
+                newsContainer.appendChild(articleCard);
+            });
+        }
+
+        function displayError(message) {
+            newsContainer.innerHTML = `
+                <div class="col-span-full text-center p-12 bg-white rounded-lg shadow-md">
+                    <h3 class="text-xl font-bold text-red-500">An Error Occurred</h3>
+                    <p class="text-slate-500 mt-2">${message}</p>
+                </div>
+            `;
+        }
+
+        async function getNewsFromAPI() {
+            if (API_BASE_URL === 'YOUR_API_GATEWAY_URL') {
+                displayError("The API Gateway URL is not configured. Please edit index.html and set the 'API_BASE_URL' variable.");
+                return;
+            }
+            try {
+                loadingState.style.display = 'flex';
+                const response = await fetch(`${API_BASE_URL}/news`);
+                if (!response.ok) {
+                    throw new Error(`API responded with status: ${response.status}`);
+                }
+                allArticles = await response.json();
+                loadingState.style.display = 'none';
+                renderArticles();
+            } catch (error) {
+                console.error('Failed to fetch news:', error);
+                displayError(error.message);
+            }
+        }
+
+        // --- Event Listeners (identical to local version) ---
+        categoryFilters.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') {
+                currentCategory = e.target.dataset.category;
+                document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('active'));
+                e.target.classList.add('active');
+                if (currentCategory === 'Indian News') {
+                    languageFilters.classList.remove('hidden');
+                } else {
+                    languageFilters.classList.add('hidden');
+                }
+                currentLanguage = 'All';
+                document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+                languageFilters.querySelector('[data-language="All"]').classList.add('active');
+                renderArticles();
+            }
+        });
+
+        languageFilters.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') {
+                currentLanguage = e.target.dataset.language;
+                document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+                e.target.classList.add('active');
+                renderArticles();
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', getNewsFromAPI);
+    </script>
+</body>
+
+</html>

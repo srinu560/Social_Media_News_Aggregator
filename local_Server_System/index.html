@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local News Aggregator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3b82f6;
+            /* Blue */
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+        }
+
+        /* Style for active category button */
+        .category-btn.active {
+            background-color: #3b82f6;
+            /* Blue */
+            color: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        /* Style for active language button */
+        .lang-btn.active {
+            background-color: #1e40af;
+            /* Darker Blue */
+            color: white;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-100 text-slate-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-slate-900">Latest News</h1>
+            <p class="text-slate-500 mt-2">Aggregated from top sources, running locally.</p>
+        </header>
+
+        <div class="text-center mb-8">
+            <button id="fetch-button"
+                class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-md">
+                Fetch Latest News Now
+            </button>
+            <p id="fetch-status" class="text-sm text-slate-500 mt-2 h-4"></p>
+        </div>
+
+        <!-- Main Category Filters -->
+        <nav id="category-filters" class="flex justify-center flex-wrap gap-2 md:gap-3 mb-4">
+            <button
+                class="category-btn active font-medium py-2 px-4 rounded-full bg-white hover:bg-slate-200 transition-all"
+                data-category="All">All News</button>
+            <button class="category-btn font-medium py-2 px-4 rounded-full bg-white hover:bg-slate-200 transition-all"
+                data-category="Indian News">Indian News</button>
+            <button class="category-btn font-medium py-2 px-4 rounded-full bg-white hover:bg-slate-200 transition-all"
+                data-category="World News">World News</button>
+            <button class="category-btn font-medium py-2 px-4 rounded-full bg-white hover:bg-slate-200 transition-all"
+                data-category="Technology">Technology</button>
+            <button class="category-btn font-medium py-2 px-4 rounded-full bg-white hover:bg-slate-200 transition-all"
+                data-category="Business">Business</button>
+            <button class="category-btn font-medium py-2 px-4 rounded-full bg-white hover:bg-slate-200 transition-all"
+                data-category="Entertainment">Entertainment</button>
+            <button class="category-btn font-medium py-2 px-4 rounded-full bg-white hover:bg-slate-200 transition-all"
+                data-category="Crime">Crime</button>
+        </nav>
+
+        <!-- Language Sub-Category Filters (Initially Hidden) -->
+        <nav id="language-filters"
+            class="hidden flex justify-center flex-wrap gap-2 md:gap-3 mb-8 p-3 bg-slate-200 rounded-lg">
+            <button
+                class="lang-btn active font-medium py-1 px-3 rounded-full bg-white hover:bg-slate-100 transition-all"
+                data-language="All">All Indian</button>
+            <button class="lang-btn font-medium py-1 px-3 rounded-full bg-white hover:bg-slate-100 transition-all"
+                data-language="English">English</button>
+            <button class="lang-btn font-medium py-1 px-3 rounded-full bg-white hover:bg-slate-100 transition-all"
+                data-language="Hindi">Hindi</button>
+            <button class="lang-btn font-medium py-1 px-3 rounded-full bg-white hover:bg-slate-100 transition-all"
+                data-language="Telugu">Telugu</button>
+            <button class="lang-btn font-medium py-1 px-3 rounded-full bg-white hover:bg-slate-100 transition-all"
+                data-language="Malayalam">Malayalam</button>
+            <button class="lang-btn font-medium py-1 px-3 rounded-full bg-white hover:bg-slate-100 transition-all"
+                data-language="Kannada">Kannada</button>
+            <button class="lang-btn font-medium py-1 px-3 rounded-full bg-white hover:bg-slate-100 transition-all"
+                data-language="Tamil">Tamil</button>
+        </nav>
+
+        <main id="news-container"
+            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
+            <div id="loading-state"
+                class="col-span-full flex flex-col items-center justify-center p-12 bg-white rounded-lg shadow-md">
+                <div class="spinner"></div>
+                <p class="mt-4 text-lg font-medium">Fetching the latest headlines...</p>
+            </div>
+        </main>
+
+        <footer class="text-center mt-12 text-slate-500 text-sm">
+            <p>Running on a local Python (Flask) server with a SQLite database.</p>
+        </footer>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://127.0.0.1:5000';
+        const newsContainer = document.getElementById('news-container');
+        const loadingState = document.getElementById('loading-state');
+        const fetchButton = document.getElementById('fetch-button');
+        const fetchStatus = document.getElementById('fetch-status');
+        const categoryFilters = document.getElementById('category-filters');
+        const languageFilters = document.getElementById('language-filters');
+
+        let currentCategory = 'All';
+        let currentLanguage = 'All'; // For sub-category filtering
+        let allArticles = []; // Cache all articles to make filtering faster
+
+        function formatDate(dateString) {
+            if (!dateString) return 'Just now';
+            try {
+                return new Date(dateString).toLocaleString('en-US', {
+                    year: 'numeric', month: 'short', day: 'numeric'
+                });
+            } catch (e) { return dateString; }
+        }
+
+        function trackView(articleId) {
+            const url = `${API_BASE_URL}/track-view`;
+            const data = JSON.stringify({ articleId });
+            // Use fetch with keepalive to ensure the request is sent even if the page unloads.
+            fetch(url, { method: 'POST', body: data, headers: { 'Content-Type': 'application/json' }, keepalive: true });
+        }
+
+        function renderArticles() {
+            newsContainer.innerHTML = '';
+
+            let articlesToRender = allArticles;
+
+            // Step 1: Filter by Main Category
+            if (currentCategory !== 'All') {
+                articlesToRender = allArticles.filter(article => article.category === currentCategory);
+            }
+
+            // Step 2: If main category is Indian News, filter by language (sub_category)
+            if (currentCategory === 'Indian News' && currentLanguage !== 'All') {
+                articlesToRender = articlesToRender.filter(article => article.sub_category === currentLanguage);
+            }
+
+            if (!articlesToRender || articlesToRender.length === 0) {
+                let message = `No articles found for "${currentCategory}"`;
+                if (currentCategory === 'Indian News' && currentLanguage !== 'All') {
+                    message += ` in ${currentLanguage}`;
+                }
+                displayError(`${message}. Try fetching the latest news.`);
+                return;
+            }
+
+            articlesToRender.forEach(article => {
+                const articleCard = document.createElement('a');
+                articleCard.href = article.link;
+                articleCard.target = '_blank';
+                articleCard.rel = 'noopener noreferrer';
+                articleCard.className = 'flex flex-col bg-white rounded-xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden group';
+
+                articleCard.addEventListener('click', () => trackView(article.id));
+
+                const placeholderImg = `https://placehold.co/600x400/e2e8f0/475569?text=${encodeURIComponent(article.sourceName)}`;
+                const displayCategory = article.sub_category ? `${article.sub_category}` : article.category;
+
+                articleCard.innerHTML = `
+                    <div class="relative">
+                        <img src="${article.imageUrl || placeholderImg}" alt="Article image" class="h-48 w-full object-cover" onerror="this.onerror=null;this.src='${placeholderImg}';">
+                        <span class="absolute top-2 right-2 bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-full">${displayCategory}</span>
+                    </div>
+                    <div class="p-5 flex flex-col flex-grow">
+                        <h2 class="text-md font-bold text-slate-900 mb-2 flex-grow group-hover:text-blue-600 transition-colors">${article.title}</h2>
+                        <div class="flex items-center justify-between text-sm text-slate-500 mt-3">
+                            <span class="font-semibold">${article.sourceName}</span>
+                            <span>${formatDate(article.publishedAt)}</span>
+                        </div>
+                    </div>
+                `;
+                newsContainer.appendChild(articleCard);
+            });
+        }
+
+        async function fetchAndCacheNews() {
+            newsContainer.innerHTML = '';
+            newsContainer.appendChild(loadingState);
+            loadingState.style.display = 'flex';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/get-news`);
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+
+                allArticles = await response.json();
+                renderArticles();
+
+            } catch (error) {
+                console.error('Failed to fetch news:', error);
+                displayError('Could not load news. Is the local server running?');
+            }
+        }
+
+        function displayError(message) {
+            loadingState.style.display = 'none';
+            newsContainer.innerHTML = `
+                <div class="col-span-full p-6 bg-red-100 border border-red-300 rounded-lg text-center">
+                    <h3 class="font-bold text-red-800">An Error Occurred</h3>
+                    <p class="text-red-600">${message}</p>
+                </div>
+             `;
+        }
+
+        async function handleManualFetch() {
+            fetchButton.disabled = true;
+            fetchButton.textContent = 'Fetching...';
+            fetchStatus.textContent = 'Please wait, this can take a moment...';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/fetch-news`, { method: 'POST' });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Unknown fetch error');
+                fetchStatus.textContent = result.message;
+                await fetchAndCacheNews();
+            } catch (error) {
+                console.error('Failed to trigger fetch:', error);
+                fetchStatus.textContent = `Error: ${error.message}`;
+            } finally {
+                fetchButton.disabled = false;
+                fetchButton.textContent = 'Fetch Latest News Now';
+                setTimeout(() => fetchStatus.textContent = '', 5000);
+            }
+        }
+
+        categoryFilters.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') {
+                currentCategory = e.target.dataset.category;
+
+                // Update active button style for main categories
+                document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('active'));
+                e.target.classList.add('active');
+
+                // Show or hide the language filters
+                if (currentCategory === 'Indian News') {
+                    languageFilters.classList.remove('hidden');
+                } else {
+                    languageFilters.classList.add('hidden');
+                }
+
+                // Reset language filter to 'All' when changing main category
+                currentLanguage = 'All';
+                document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+                languageFilters.querySelector('[data-language="All"]').classList.add('active');
+
+                renderArticles();
+            }
+        });
+
+        languageFilters.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') {
+                currentLanguage = e.target.dataset.language;
+
+                // Update active button style for languages
+                document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+                e.target.classList.add('active');
+                renderArticles();
+            }
+        });
+
+        fetchButton.addEventListener('click', handleManualFetch);
+        document.addEventListener('DOMContentLoaded', fetchAndCacheNews);
+    </script>
+</body>
+
+</html>
